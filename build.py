@@ -235,6 +235,15 @@ document.querySelectorAll('main h1[id],main h2[id],main h3[id]').forEach(h=>io.o
 def main():
     raw = open(SRC, encoding="utf-8").read()
 
+    # 剥离 YAML frontmatter:--- 开头到下一个独立 --- 行
+    if raw.startswith("---\n"):
+        end = re.search(r"\n---[ \t]*\n", raw[4:])
+        if end:
+            raw = raw[4 + end.end():]
+            print("已剥离 YAML frontmatter")
+        else:
+            print("WARN: 找到 frontmatter 开头但无结束 --- 行")
+
     # 兜底:![[...]] 嵌入 -> 斜体占位文字
     raw = re.sub(r"!\[\[([^\[\]]+?)\]\]",
                  lambda m: f'<span class="embed-missing">[嵌入内容未收录:{m.group(1)}]</span>', raw)
@@ -259,6 +268,9 @@ def main():
                   r'\1<input type="checkbox" disabled> ', html)
     html = re.sub(r"(<li>\s*(?:<p>)?\s*)\[[xX]\]",
                   r'\1<input type="checkbox" checked disabled> ', html)
+
+    # 图片懒加载
+    html = re.sub(r"<img\b(?![^>]*\bloading=)", '<img loading="lazy"', html)
 
     toc_html = build_toc(headings)
     gen_time = subprocess.check_output(["date", "+%Y-%m-%d %H:%M:%S %Z"]).decode().strip()
@@ -307,8 +319,13 @@ def main():
     assert not dead, f"存在死链 id: {dead[:10]}"
     assert "[[" not in doc, "存在 [[ 残留"
     assert "![[" not in doc, "存在 ![[ 残留"
+    assert "<p>title:" not in doc and "<hr" not in doc.split("<h1")[0][-200:], \
+        "frontmatter 可能残留"
+    img_lazy = len(re.findall(r'<img loading="lazy"', doc))
     print(f"死链检查: 0 (全部 {len(hrefs)} 个 href 目标存在)")
     print("[[ / ![[ 残留检查: 通过")
+    print(f"frontmatter 残留检查: 通过")
+    print(f'<img loading="lazy" 数量: {img_lazy}')
     import os
     print(f"输出: {OUT} ({os.path.getsize(OUT)} 字节, {os.path.getsize(OUT)/1024:.1f} KB)")
 
